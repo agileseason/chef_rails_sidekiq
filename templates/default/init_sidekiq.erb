@@ -1,0 +1,123 @@
+#!/bin/bash
+### BEGIN INIT INFO
+# Provides:          <%=@app_name %>
+# Required-Start:    $all
+# Required-Stop:     $network $local_fs $syslog
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: Start the <%=@app_name %> sidekiq at boot
+# Description:       Enable <%=@app_name %> at boot time.
+### END INIT INFO
+
+APP_NAME=<%=@app_name %>
+APP_USER=<%=@app_user %>
+APP_ENV=<%=@app_env %>
+APP_ROOT=<%=@app_root %>
+APP_SHARED=<%=@app_shared %>
+
+APP_CONFIG="$APP_ROOT/config"
+LOG_FILE="$APP_SHARED/log/sidekiq.log"
+LOCK_FILE="$APP_SHARED/tmp/pids/sidekiq-lock"
+PID_FILE="$APP_SHARED/tmp/pids/sidekiq.pid"
+
+EXECUTABLE="sidekiq"
+EXECUTABLE_OPTS="-e $APP_ENV -P $PID_FILE"
+
+RBENV_ROOT="/home/$APP_USER/.rbenv"
+PATH="$RBENV_ROOT/bin:$RBENV_ROOT/shims:$PATH"
+
+START_CMD="RAILS_ENV=$APP_ENV bundle exec $EXECUTABLE $EXECUTABLE_OPTS"
+CMD="$START_CMD >> $LOG_FILE 2>&1 &"
+
+RETVAL=0
+
+if [ -d $APP_ROOT ]
+then
+  cd $APP_ROOT
+else
+  if [ "$1" = 'quiet' ] || [ "$1" = 'stop' ]
+  then
+    exit 0
+  else
+    exit 1
+  fi
+fi
+
+start() {
+  [ `id -u` == '0' ] || (echo "$EXECUTABLE runs as root only .."; exit 5)
+  [ -d $APP_ROOT ] || (echo "$APP_ROOT not found!.. Exiting"; exit 6)
+  cd $APP_ROOT
+  echo "Starting $EXECUTABLE message processor .. "
+
+  sudo -u $APP_USER -H bash -l -c "$CMD"
+
+  RETVAL=$?
+  # Sleeping for 2 seconds for process to be precisely visible in process table - See status ()
+  sleep 2
+  [ $RETVAL -eq 0 ] && touch $LOCK_FILE
+  return $RETVAL
+}
+
+stop() {
+  echo "Stopping $EXECUTABLE message processor .."
+
+  if [ -f $PID_FILE ]
+  then
+    sig "INT"
+    RETVAL=$?
+    [ $RETVAL -eq 0 ] && rm -f $LOCK_FILE && rm -f $PID_FILE
+  else
+    RETVAL=0
+  fi
+
+  return $RETVAL
+}
+
+quiet() {
+  echo "Stopping $EXECUTABLE accepting new work .."
+
+  if [ -f $PID_FILE ]
+  then
+    sig "TSTP"
+    RETVAL=$?
+  else
+    RETVAL=0
+  fi
+  return $RETVAL
+}
+
+sig () {
+  test -s "$PID_FILE" && kill -$1 `cat $PID_FILE`
+}
+
+if !(test -s "$PID_FILE" && ps -p `cat $PID_FILE` > /dev/null); then
+  rm -f $PID_FILE
+fi
+
+case "$1" in
+  start)
+    sig 0 && echo >&2 "Already running" && exit 0
+    start
+    ;;
+  stop)
+    stop
+    ;;
+  restart|reload)
+    stop
+    start
+    ;;
+  quiet)
+    quiet
+    ;;
+  status)
+    sig 0 && echo "$EXECUTABLE message processor is running .." && exit 0
+
+    echo "$EXECUTABLE message processor is stopped .."
+    RETVAL=1
+    ;;
+  *)
+    echo "Usage: $0 {start|stop|restart|quiet|status}"
+    exit 0
+    ;;
+esac
+exit $RETVAL
