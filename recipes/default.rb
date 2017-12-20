@@ -30,8 +30,8 @@ systemd_unit "#{app.service(:sidekiq)}.service" do
     Restart=on-failure
 
     ExecStart=/bin/bash -c '#{bundle_exec} sidekiq -e #{app.env}'
-    ExecReload=/bin/bash -c '#{bundle_exec} sidekiqctl quiet $MAINPID'
-    ExecStop=/bin/bash -c '#{bundle_exec} sidekiqctl stop $MAINPID'
+    ExecReload=/bin/kill -s TSTP $MAINPID
+    ExecStop=/bin/kill -s INT $MAINPID
 
     StandardOutput=journal
     StandardError=journal
