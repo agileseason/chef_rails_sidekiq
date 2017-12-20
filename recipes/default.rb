@@ -9,20 +9,38 @@
 
 app = AppHelpers.new node['app']
 
-template "/etc/init.d/#{app.service :sidekiq}" do
-  source 'init_sidekiq.erb'
+bundle_exec = <<~CMD.gsub(/\n|  +/, ' ')
+  RAILS_ENV=#{app.env}
+  PATH=/home/#{app.user}/.rbenv/bin:/home/#{app.user}/.rbenv/shims:$PATH
+    bundle exec
+CMD
 
-  variables(
-    app_name: app.name,
-    app_user: app.user,
-    app_env: app.env,
-    app_root: app.dir(:root),
-    app_shared: app.dir(:shared)
-  )
+systemd_unit "#{app.service(:sidekiq)}.service" do
+  content <<~SERVICE
+    [Unit]
+    Description=Sidekiq for #{app.name} #{app.env}
+    After=syslog.target network.target
 
-  mode '0755'
-end
+    [Service]
+    SyslogIdentifier=#{app.service(:sidekiq)}.service
+    User=#{app.user}
+    Group=#{app.group}
+    UMask=0002
+    WorkingDirectory=#{app.dir(:root)}
+    Restart=on-failure
 
-if File.exists? app.dir(:root)
-  service(app.service(:sidekiq)) { action :enable }
+    ExecStart=/bin/bash -c '#{bundle_exec} sidekiq -e #{app.env}'
+    ExecReload=/bin/bash -c '#{bundle_exec} sidekiqctl quiet $MAINPID'
+    ExecStop=/bin/bash -c '#{bundle_exec} sidekiqctl stop $MAINPID'
+
+    StandardOutput=journal
+    StandardError=journal
+
+    [Install]
+    WantedBy=multi-user.target
+  SERVICE
+
+  triggers_reload true
+  verify false
+  action %i[create enable start]
 end
