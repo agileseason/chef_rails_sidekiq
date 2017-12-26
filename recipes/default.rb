@@ -47,5 +47,6 @@ systemd_unit "#{app.service(:sidekiq)}.service" do
     action %i[create enable start]
   else
     action %i[create enable]
+    Chef::Log.warn "skipping systemd_unit start (#{app.dir(:root)} is not exists)"
   end
 end
