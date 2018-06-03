@@ -8,6 +8,7 @@
 #
 
 app = AppHelpers.new node['app']
+config = node['chef_rails_sidekiq']['config']
 
 bundle_exec = <<~CMD.gsub(/\n|  +/, ' ')
   RAILS_ENV=#{app.env}
@@ -29,7 +30,7 @@ systemd_unit "#{app.service(:sidekiq)}.service" do
     WorkingDirectory=#{app.dir(:root)}
     Restart=on-failure
 
-    ExecStart=/bin/bash -c '#{bundle_exec} sidekiq -e #{app.env}'
+    ExecStart=/bin/bash -c '#{bundle_exec} sidekiq -e #{app.env} -C #{app.dir(:root)}/#{config}'
     ExecReload=/bin/kill -s TSTP $MAINPID
     ExecStop=/bin/kill -s INT $MAINPID
 
