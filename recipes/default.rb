@@ -29,6 +29,7 @@ systemd_unit "#{app.service(:sidekiq)}.service" do
     UMask=0002
     WorkingDirectory=#{app.dir(:root)}
     Restart=on-failure
+    LimitNOFILE=49152
 
     ExecStart=/bin/bash -c '#{bundle_exec} sidekiq -e #{app.env} -C #{app.dir(:root)}/#{config}'
     ExecReload=/bin/kill -s TSTP $MAINPID
